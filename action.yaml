@@ -1,39 +1,44 @@
-name: Run lintering with PyLint
-description: 'Runs `PyLint` for code in folder in a given folder.'
+name: Run tests with PyTest
+description: Run testing using pytest. Results are published as artifacts.
 
 inputs:
   source:
-    description: 'Directory where the source code is located.'
+    description: 'Directory where the source code is located. Defaults to current directory.'
     required: true
     default: .
-  moduleOrPackage:
-    description: 'Module or package over which to run lintering.'
-    required: true
-    default: '*'
+  configuration:
+    description: 'PyTest configuration file path (.ini).'
+    required: false
+    default: ''
   useConda:
     description: 'Indicates if the tests will run using an specific conda environment.'
-    required: true
+    required: false
     default: 'false'
   condaEnvName:
-    description: 'Name of the conda environment to use. Required if `useConda` is `true`.'
+    description: 'Name of the conda environment to use. Required if useConda is true.'
     required: false
-  disable:
-    description: 'Indicates which rules should not be checked. Coma separeted values are possible.'
-    required: false
-    default: None
-  pkgWhitelist:
-    description: 'Indicates which packages should not be checked for lintering.'
-    required: false
-    default: None
-  version:
-    description: PyLint library version.
+    default: ''
+  testFolder:
+    description: 'Folder where test are placed. Defaults to tests.'
     required: true
-    default: 2.12.1
+    default: tests
+  version:
+    description: 'PyTest library version.'
+    required: true
+    default: 6.2.5
+  args:
+    description: 'Parameters, if any, to provide to the test. Provide them starting with -q, for instance `-q --param1=value1 --param2=value2`'
+    required: false
+    default: ''
+  outputFile:
+    description: 'File name where the results will be generated. File is XML.'
+    required: false
+    default: '${{ github.workspace }}/test-results/results.xml'
 
 runs:
   using: "composite"
   steps:
-    - name: Running PyLint
+    - name: 'Running PyTest'
       shell: bash -l {0}
       run: |
         set -e
@@ -42,20 +47,28 @@ runs:
           source $CONDA/etc/profile.d/conda.sh
           conda activate ${{ inputs.condaEnvName }}
 
-          if ! [[ $(conda list --json | jq -r '.[] | select(.name=="pylint")') ]]; then
-            echo "::debug::Environment doesn't contain PyLint. Installing"
-            pip install pylint==${{ inputs.version }}
+          if ! [[ $(conda list --json | jq -r '.[] | select(.name=="pytest")') ]]; then
+            echo "::debug::Environment doesn't contain PyTest. Installing..."
+            pip install pytest==${{ inputs.version }}
+            pip install pytest-cov
           fi
         fi
 
-        for PACKAGE_FOLDER in ${{ inputs.source }}/${{ inputs.moduleOrPackage }}/
-        do
-          PACKAGE=$(basename $PACKAGE_FOLDER)
-          echo "::debug::>pylint $PACKAGE --disable=${{ inputs.disable}} --extension-pkg-whitelist=${{ inputs.pkgWhitelist }}"
-          (cd ${{ inputs.source }} && python -m pylint $PACKAGE --disable=${{ inputs.disable}} --extension-pkg-whitelist=${{ inputs.pkgWhitelist }})
-        done
+        if [[ '${{ inputs.configuration }}' == '' ]]; then
+          echo "::debug::Running tests"
+          (cd ${{ inputs.source }} && python -m pytest ${{ inputs.testFolder }} ${{ inputs.args }} --junit-xml=${{ inputs.outputFile }})
+        else
+          echo "::debug::Running tests with configuration from ${{ inputs.configuration }}."
+          (cd ${{ inputs.source }}; python -m pytest ${{ inputs.testFolder }} ${{ inputs.args }} -c ${{ inputs.configuration }} --junit-xml=${{ inputs.outputFile }})
+        fi
 
         if ${{ inputs.useConda }}; then
           echo "::debug::Deactivating conda environment ${{ inputs.condaEnvName }}"
           conda deactivate
         fi
+
+    - name: Publish test results
+      uses: EnricoMi/publish-unit-test-result-action/composite@v1
+      with:
+        files: ${{ inputs.outputFile }} 
+        fail_on: "test failures"
