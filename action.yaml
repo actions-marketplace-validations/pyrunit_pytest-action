@@ -1,4 +1,4 @@
-name: Run PyTest
+name: Run tests with PyTest
 description: Run testing using pytest. Results are published as artifacts.
 
 inputs:
