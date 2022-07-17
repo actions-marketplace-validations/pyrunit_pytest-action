@@ -1,4 +1,4 @@
-name: Run PyLint for Python
+name: Run lintering with PyLint
 description: 'Runs `PyLint` for code in folder in a given folder.'
 
 inputs:
